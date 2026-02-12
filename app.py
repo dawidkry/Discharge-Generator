@@ -1,54 +1,40 @@
 import streamlit as st
+import google.generativeai as genai
 
-st.set_page_config(page_title="Auto-Discharge Summary", page_icon="🏥")
+# Setup your API Key (Get one for free at aistudio.google.com)
+# genai.configure(api_key="YOUR_API_KEY")
 
-st.title("🏥 Clinical Summary Generator")
+st.title("🏥 Clinical Narrative Synthesizer")
 
-# 1. Initialize Session State for the output
 if 'summary_output' not in st.session_state:
     st.session_state.summary_output = ""
 
-# 2. Input Section
-raw_notes = st.text_area("Paste clinical notes/ward round entries here:", height=200)
+raw_notes = st.text_area("Paste multi-day admission notes:", height=200)
+detail_level = st.select_slider("Detail Level", options=["Concise", "Standard", "Comprehensive"])
 
-# 3. Clinical Parameters
-col1, col2 = st.columns(2)
-with col1:
-    summary_type = st.selectbox("Document Type", ["Discharge Summary", "Consultant Letter", "Handover Note"])
-with col2:
-    # This is the slider you liked!
-    detail_level = st.select_slider(
-        "Detail Level", 
-        options=["Concise", "Standard", "Comprehensive"]
-    )
-
-# 4. Generation Logic
-if st.button("Generate Summary"):
+if st.button("Synthesize Discharge Summary"):
     if raw_notes:
-        with st.spinner(f'Generating {detail_level} {summary_type}...'):
+        with st.spinner('Analyzing clinical timeline...'):
+            # This logic tells the AI how to behave based on your slider
+            prompt = f"""
+            Act as a Senior Medical Registrar. You are writing a discharge summary for a GP.
+            Based on the following notes, provide a {detail_level} summary.
             
-            # This is where the magic happens. 
-            # We would send 'detail_level' to the AI as a command.
-            if detail_level == "Concise":
-                result = "Shorthand Summary: Pt admitted with UTI/AKI. Treated with IV Co-amox. AKI resolved. Home with 7d oral abx. GP to r/v U&Es."
-            elif detail_level == "Standard":
-                result = "Clinical Summary: 84yo F admitted with UTI and AKI. Responded well to IV antibiotics and rehydration. Discharged on oral antibiotics. Ramipril held."
-            else: # Comprehensive
-                result = "Comprehensive Discharge Narrative: Mrs. Smith presented with urosepsis and a secondary AKI... [Full details including blood trends and specific GP follow-up instructions]"
+            Clinical Notes:
+            {raw_notes}
             
-            # Store in session state so it persists in the edit box
-            st.session_state.summary_output = result
-    else:
-        st.warning("Please enter some clinical notes first.")
+            Formatting instructions:
+            - If 'Concise', use bullet points.
+            - If 'Comprehensive', use professional medical prose and separate sections for Complications and GP Actions.
+            - Do not invent facts; only use the provided notes.
+            """
+            
+            # (Simulating the AI response for now until you plug in your API key)
+            # In the real version, you'd use: response = model.generate_content(prompt)
+            
+            if detail_level == "Comprehensive":
+                output = "DIAGNOSES:\n1. Gallstone Cholecystitis (Resolved post-ERCP)\n2. Post-ERCP Pancreatitis\n3. Hospital Acquired Pneumonia\n\nHOSPITAL COURSE:\nMr. Jones was admitted on 01/02 with cholecystitis. Following ERCP on 02/02, he developed post-procedural pancreatitis (Lipase 1200), managed with aggressive fluid resuscitation..."
+            else:
+                output = "Brief Summary: Complicated admission for cholecystitis, post-ERCP pancreatitis and HAP. Now clinically stable and discharged on oral antibiotics."
 
-# 5. The Persistent Edit Box
-st.markdown("---")
-st.subheader("Review & Edit")
-edited_text = st.text_area(
-    "Finalize the text below before copying to EPR:",
-    value=st.session_state.summary_output,
-    height=300
-)
-
-if st.button("Copy to Clipboard"):
-    st.info("In a real app, this would copy the text. For now, you can highlight and copy the box above!")
+            st.session_state.summary_output = output
