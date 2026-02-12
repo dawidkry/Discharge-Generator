@@ -4,14 +4,11 @@ import google.generativeai as genai
 # --- 1. SETTINGS & SECRETS ---
 st.set_page_config(page_title="MedSynth AI", page_icon="🏥", layout="wide")
 
-# This looks for the secret you saved in the Streamlit Dashboard
-try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    else:
-        st.warning("API Key not found in Secrets. Please check your Streamlit settings.")
-except Exception as e:
-    st.error(f"Setup Error: {e}")
+# Securely configure the API
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+else:
+    st.error("API Key not found. Please add GOOGLE_API_KEY to your Streamlit Secrets.")
 
 # --- 2. SESSION STATE ---
 if 'summary_output' not in st.session_state:
@@ -19,29 +16,16 @@ if 'summary_output' not in st.session_state:
 
 # --- 3. UI HEADER ---
 st.title("🏥 MedSynth: Clinical Narrative Synthesizer")
-st.markdown("""
-    **Clinical Decision Support Tool** | Designed for multi-day admission synthesis.
-    *Paste ward notes, select complexity, and generate a structured GP discharge narrative.*
-""")
+st.markdown("---")
 
 # --- 4. SIDEBAR CONTROLS ---
 with st.sidebar:
-    st.header("Synthesis Parameters")
-    summary_type = st.selectbox(
-        "Document Type", 
-        ["Discharge Summary", "GP Letter", "Medical Handover"]
-    )
-    
-    detail_level = st.select_slider(
-        "Detail Level", 
-        options=["Concise", "Standard", "Comprehensive"],
-        value="Standard"
-    )
+    st.header("Document Settings")
+    summary_type = st.selectbox("Type", ["Discharge Summary", "GP Letter", "Handover"])
+    detail_level = st.select_slider("Detail", options=["Concise", "Standard", "Comprehensive"])
     
     st.divider()
-    st.info("""
-    **Pro-Tip:** Use 'Comprehensive' for patients with multiple complications (e.g., AKI + Pulmonary Oedema).
-    """)
+    st.info("This tool synthesizes chronological ward notes into a professional narrative.")
 
 # --- 5. MAIN INTERFACE ---
 col1, col2 = st.columns([1, 1])
@@ -49,58 +33,54 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.subheader("Raw Clinical Input")
     raw_notes = st.text_area(
-        "Paste chronological ward notes here:", 
-        height=500,
-        placeholder="01/02: Adm via A&E with AKI...\n03/02: Developed SOB, started diuretics..."
+        "Paste notes here:", 
+        height=450,
+        placeholder="e.g., 01/02: Admitted with AKI... 03/02: SOB developed..."
     )
     
     if st.button("Synthesize Narrative", type="primary", use_container_width=True):
         if not raw_notes:
-            st.warning("Please enter clinical notes.")
+            st.warning("Please enter notes first.")
         else:
-            with st.spinner('Analyzing clinical timeline and linking complications...'):
-                try:
-                    # UPDATED MODEL NAME TO AVOID 404
-                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
-                    
-                    # DOCTOR-TO-DOCTOR PROMPT ENGINEERING
-                    prompt = f"""
-                    Role: Senior Medical Registrar.
-                    Task: Synthesize raw clinical notes into a professional {summary_type}.
-                    Complexity Setting: {detail_level}
-                    
-                    Input Notes:
-                    {raw_notes}
-                    
-                    Instructions:
-                    1. Use British Medical English.
-                    2. Chronological Narrative: Link complications (e.g., explain if IV fluids for AKI contributed to Heart Failure exacerbation).
-                    3. Medications: Create a clear 'Medication Changes' section.
-                    4. GP Actions: Use a bulleted list for follow-up (e.g., blood tests, clinic referrals).
-                    5. Formatting: Use Markdown bolding for key diagnoses.
-                    """
-                    
-                    response = model.generate_content(prompt)
-                    st.session_state.summary_output = response.text
+            with st.spinner('Accessing Clinical Engine...'):
+                # We use a list of potential model names to handle Google's API versioning
+                model_names = ['gemini-1.5-flash', 'gemini-1.5-pro']
+                success = False
+                
+                for m_name in model_names:
+                    try:
+                        model = genai.GenerativeModel(m_name)
+                        
+                        prompt = f"""
+                        Role: Senior Medical Registrar.
+                        Task: Synthesize these clinical notes into a {summary_type}.
+                        Level: {detail_level}.
+                        
+                        Input: {raw_notes}
+                        
+                        Instructions: Use British Medical English. Chronologically link complications. 
+                        Clearly list Medication Changes and GP Follow-up actions.
+                        """
+                        
+                        response = model.generate_content(prompt)
+                        st.session_state.summary_output = response.text
+                        success = True
+                        break # Exit loop if successful
+                    except Exception as e:
+                        continue # Try the next model if 404
+                
+                if success:
                     st.rerun()
-
-                except Exception as e:
-                    st.error(f"Clinical Engine Error: {e}")
+                else:
+                    st.error("Model connection failed. This usually happens if the Gemini API is restricted in your region or the model name has been updated by Google.")
 
 with col2:
-    st.subheader("Synthesized Output")
-    # Output area
+    st.subheader("Review & Edit")
     final_output = st.text_area(
-        "Editable Summary:", 
+        "Editable Output:", 
         value=st.session_state.summary_output, 
-        height=500
+        height=450
     )
     
     if st.session_state.summary_output:
-        st.download_button(
-            label="Download as .txt",
-            data=final_output,
-            file_name="Discharge_Summary.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+        st.download_button("Download .txt", final_output, file_name="Summary.txt")
